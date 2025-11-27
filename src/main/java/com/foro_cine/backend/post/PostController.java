@@ -1,12 +1,12 @@
 package com.foro_cine.backend.post;
 
 import com.foro_cine.backend.post.dto.PostDto;
-import com.foro_cine.backend.post.dto.VoteRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/posts")
@@ -17,34 +17,25 @@ public class PostController {
     private final PostRepository postRepository;
     private final PostVoteRepository postVoteRepository;
 
-    // ✅ Obtener todos los posts (sin userVote → 0)
+    // ✅ Obtener todos los posts (sin userVote)
     @GetMapping
-    public List<PostDto> getAll(
-            @RequestParam(required = false) Long userId
-    ) {
+    public ResponseEntity<List<PostDto>> getAllPosts() {
         List<Post> posts = postRepository.findAll();
 
-        return posts.stream()
-                .map(post -> {
-                    int userVote = 0;
-                    if (userId != null) {
-                        userVote = postVoteRepository
-                                .findByPostIdAndUserId(post.getId(), userId)
-                                .map(PostVote::getVote)
-                                .orElse(0);
-                    }
-                    return new PostDto(
-                            post.getId(),
-                            post.getTitulo(),
-                            post.getContenido(),
-                            post.getAutor(),
-                            post.getFecha(),
-                            post.getLikes(),
-                            post.getDislikes(),
-                            userVote
-                    );
-                })
-                .toList();
+        List<PostDto> dtos = posts.stream()
+                .map(post -> new PostDto(
+                        post.getId(),
+                        post.getTitulo(),
+                        post.getContenido(),
+                        post.getAutor(),
+                        post.getFecha(),
+                        post.getLikes(),
+                        post.getDislikes(),
+                        0 // userVote por ahora 0
+                ))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(dtos);
     }
 
     // ✅ Crear post (likes/dislikes siempre en 0 al inicio)
@@ -55,50 +46,66 @@ public class PostController {
         return ResponseEntity.ok(postRepository.save(post));
     }
 
-    // ✅ Votar like/dislike
+    // ✅ Votar like/dislike usando QUERY PARAMS (como lo hace la app)
     @PostMapping("/{postId}/vote")
     public ResponseEntity<PostDto> vote(
             @PathVariable Long postId,
-            @RequestBody VoteRequest request
+            @RequestParam Long userId,
+            @RequestParam int vote // -1, 0, 1
     ) {
+        if (vote < -1 || vote > 1) {
+            return ResponseEntity.badRequest().build();
+        }
+
         Post post = postRepository.findById(postId).orElse(null);
         if (post == null) {
             return ResponseEntity.notFound().build();
         }
 
-        if (request.getVote() < -1 || request.getVote() > 1) {
-            return ResponseEntity.badRequest().build();
-        }
-
+        // Buscar si el usuario ya votó antes
         PostVote existing = postVoteRepository
-                .findByPostIdAndUserId(postId, request.getUserId())
+                .findByPostIdAndUserId(postId, userId)
                 .orElse(null);
 
-        int previousVote = existing != null ? existing.getVote() : 0;
-        int newVote = request.getVote();
+        int previousVote = (existing != null) ? existing.getVote() : 0;
+        int newVote = vote;
 
-        // Ajustar contadores según cambio
-        if (previousVote == 1) post.setLikes(post.getLikes() - 1);
-        if (previousVote == -1) post.setDislikes(post.getDislikes() - 1);
-
-        if (newVote == 1) post.setLikes(post.getLikes() + 1);
-        if (newVote == -1) post.setDislikes(post.getDislikes() + 1);
-
-        // Guardar cambios
-        if (existing == null) {
-            existing = PostVote.builder()
-                    .postId(postId)
-                    .userId(request.getUserId())
-                    .vote(newVote)
-                    .build();
-        } else {
-            existing.setVote(newVote);
+        // Quitar el voto anterior de los contadores
+        if (previousVote == 1) {
+            post.setLikes(post.getLikes() - 1);
+        } else if (previousVote == -1) {
+            post.setDislikes(post.getDislikes() - 1);
         }
 
-        postVoteRepository.save(existing);
+        // Aplicar el nuevo voto
+        if (newVote == 1) {
+            post.setLikes(post.getLikes() + 1);
+        } else if (newVote == -1) {
+            post.setDislikes(post.getDislikes() + 1);
+        }
+
+        // Manejar el registro en post_votes
+        if (existing == null) {
+            if (newVote != 0) {
+                existing = PostVote.builder()
+                        .postId(postId)
+                        .userId(userId)
+                        .vote(newVote)
+                        .build();
+                postVoteRepository.save(existing);
+            }
+        } else {
+            if (newVote == 0) {
+                // quitar completamente el voto
+                postVoteRepository.delete(existing);
+            } else {
+                existing.setVote(newVote);
+                postVoteRepository.save(existing);
+            }
+        }
+
         postRepository.save(post);
 
-        // Devolver PostDto con userVote actualizado
         PostDto dto = new PostDto(
                 post.getId(),
                 post.getTitulo(),
@@ -107,7 +114,7 @@ public class PostController {
                 post.getFecha(),
                 post.getLikes(),
                 post.getDislikes(),
-                newVote
+                newVote // userVote
         );
 
         return ResponseEntity.ok(dto);

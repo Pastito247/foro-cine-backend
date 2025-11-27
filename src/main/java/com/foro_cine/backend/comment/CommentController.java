@@ -7,26 +7,37 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/comments")
+@RequestMapping("/api")
 @CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 public class CommentController {
 
     private final CommentRepository commentRepository;
 
-    @GetMapping("/post/{postId}")
-    public List<Comment> getByPost(@PathVariable Long postId) {
-        return commentRepository.findByPostId(postId);
+    // ✅ Obtener comentarios de un post
+    @GetMapping("/posts/{postId}/comments")
+    public ResponseEntity<List<Comment>> getCommentsByPost(@PathVariable Long postId) {
+        List<Comment> comments = commentRepository.findByPostId(postId);
+        return ResponseEntity.ok(comments);
     }
 
-    @PostMapping
-    public ResponseEntity<Comment> create(@RequestBody Comment comment) {
-        // id lo genera la BD, la app manda postId, autor, contenido, fecha
+    // ✅ Crear comentario para un post
+    @PostMapping("/posts/{postId}/comments")
+    public ResponseEntity<Comment> addComment(
+            @PathVariable Long postId,
+            @RequestBody Comment comment
+    ) {
+        // id lo genera la BD, se limpia por seguridad
         comment.setId(null);
-        return ResponseEntity.ok(commentRepository.save(comment));
+        // el postId lo tomamos de la ruta
+        comment.setPostId(postId);
+
+        Comment saved = commentRepository.save(comment);
+        return ResponseEntity.ok(saved);
     }
 
-    @DeleteMapping("/{id}")
+    // ✅ Eliminar comentario por id
+    @DeleteMapping("/comments/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         if (!commentRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
