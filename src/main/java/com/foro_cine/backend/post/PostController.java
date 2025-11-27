@@ -46,20 +46,15 @@ public class PostController {
     }
 
     // ✅ Crear post (likes/dislikes siempre en 0 al inicio)
-    // ✅ Crear post (likes/dislikes siempre en 0 al inicio)
     @PostMapping
     public ResponseEntity<Post> create(@RequestBody Post post) {
-        // likes / dislikes siempre en 0
         post.setLikes(0);
         post.setDislikes(0);
 
-        // Validar que venga un userId válido
         if (post.getUserId() == null || post.getUserId() <= 0) {
             return ResponseEntity.badRequest().build();
         }
 
-        // Intentar sincronizar autor con el nombre del usuario SI existe,
-        // pero si no existe el usuario IGUAL dejamos crear el post.
         userRepository.findById(post.getUserId())
                 .ifPresent(user -> {
                     if (post.getAutor() == null || post.getAutor().isBlank()) {
