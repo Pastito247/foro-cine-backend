@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -141,10 +142,12 @@ public class PostController {
     }
 
     // ✅ SOLO puede borrar: creador del post (userId) o ADMIN
+    @Transactional
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletePost(
             @PathVariable Long id,
-            @RequestParam Long userId) {
+            @RequestParam Long userId
+    ) {
         Post post = postRepository.findById(id).orElse(null);
         if (post == null) {
             return ResponseEntity.notFound().build();
@@ -176,4 +179,5 @@ public class PostController {
 
         return ResponseEntity.noContent().build();
     }
+
 }
