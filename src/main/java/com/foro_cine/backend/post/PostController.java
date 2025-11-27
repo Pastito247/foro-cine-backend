@@ -48,9 +48,27 @@ public class PostController {
     // ✅ Crear post (likes/dislikes siempre en 0 al inicio)
     @PostMapping
     public ResponseEntity<Post> create(@RequestBody Post post) {
+        // likes / dislikes siempre en 0
         post.setLikes(0);
         post.setDislikes(0);
-        return ResponseEntity.ok(postRepository.save(post));
+
+        // (Opcional pero recomendado) validar que el userId exista
+        if (post.getUserId() == null) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        User user = userRepository.findById(post.getUserId()).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        }
+
+        // Podemos asegurar que autor coincide con el nombre del usuario
+        if (post.getAutor() == null || post.getAutor().isBlank()) {
+            post.setAutor(user.getNombre());
+        }
+
+        Post saved = postRepository.save(post);
+        return ResponseEntity.ok(saved);
     }
 
     // ✅ Votar like/dislike usando QUERY PARAMS (como lo hace la app)
@@ -127,7 +145,7 @@ public class PostController {
         return ResponseEntity.ok(dto);
     }
 
-    // ✅ SOLO puede borrar: creador del post o ADMIN
+    // ✅ SOLO puede borrar: creador del post (userId) o ADMIN
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletePost(
             @PathVariable Long id,
@@ -144,8 +162,9 @@ public class PostController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        boolean esCreador = post.getAutor() != null
-                && post.getAutor().equalsIgnoreCase(user.getNombre());
+        // ✅ Comparar por userId del creador, NO por nombre
+        boolean esCreador = post.getUserId() != null
+                && post.getUserId().equals(userId);
 
         boolean esAdmin = user.getRole() == UserRole.ADMIN;
 

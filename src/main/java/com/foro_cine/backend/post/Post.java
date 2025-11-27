@@ -26,6 +26,9 @@ public class Post {
     private String autor;
 
     @Column(nullable = false)
+    private Long userId;
+
+    @Column(nullable = false)
     private String fecha;
 
     private int likes;
