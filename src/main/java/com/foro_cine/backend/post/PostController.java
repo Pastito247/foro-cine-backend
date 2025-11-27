@@ -46,26 +46,26 @@ public class PostController {
     }
 
     // ✅ Crear post (likes/dislikes siempre en 0 al inicio)
+    // ✅ Crear post (likes/dislikes siempre en 0 al inicio)
     @PostMapping
     public ResponseEntity<Post> create(@RequestBody Post post) {
         // likes / dislikes siempre en 0
         post.setLikes(0);
         post.setDislikes(0);
 
-        // (Opcional pero recomendado) validar que el userId exista
-        if (post.getUserId() == null) {
+        // Validar que venga un userId válido
+        if (post.getUserId() == null || post.getUserId() <= 0) {
             return ResponseEntity.badRequest().build();
         }
 
-        User user = userRepository.findById(post.getUserId()).orElse(null);
-        if (user == null) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-        }
-
-        // Podemos asegurar que autor coincide con el nombre del usuario
-        if (post.getAutor() == null || post.getAutor().isBlank()) {
-            post.setAutor(user.getNombre());
-        }
+        // Intentar sincronizar autor con el nombre del usuario SI existe,
+        // pero si no existe el usuario IGUAL dejamos crear el post.
+        userRepository.findById(post.getUserId())
+                .ifPresent(user -> {
+                    if (post.getAutor() == null || post.getAutor().isBlank()) {
+                        post.setAutor(user.getNombre());
+                    }
+                });
 
         Post saved = postRepository.save(post);
         return ResponseEntity.ok(saved);
@@ -149,8 +149,7 @@ public class PostController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletePost(
             @PathVariable Long id,
-            @RequestParam Long userId
-    ) {
+            @RequestParam Long userId) {
         Post post = postRepository.findById(id).orElse(null);
         if (post == null) {
             return ResponseEntity.notFound().build();
