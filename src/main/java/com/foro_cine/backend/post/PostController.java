@@ -1,7 +1,12 @@
 package com.foro_cine.backend.post;
 
+import com.foro_cine.backend.comment.CommentRepository;
 import com.foro_cine.backend.post.dto.PostDto;
+import com.foro_cine.backend.user.User;
+import com.foro_cine.backend.user.UserRepository;
+import com.foro_cine.backend.user.UserRole;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,6 +21,8 @@ public class PostController {
 
     private final PostRepository postRepository;
     private final PostVoteRepository postVoteRepository;
+    private final CommentRepository commentRepository;
+    private final UserRepository userRepository;
 
     // ✅ Obtener todos los posts (sin userVote)
     @GetMapping
@@ -118,5 +125,42 @@ public class PostController {
         );
 
         return ResponseEntity.ok(dto);
+    }
+
+    // ✅ SOLO puede borrar: creador del post o ADMIN
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deletePost(
+            @PathVariable Long id,
+            @RequestParam Long userId
+    ) {
+        Post post = postRepository.findById(id).orElse(null);
+        if (post == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            // No se encontró el usuario que intenta borrar
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        boolean esCreador = post.getAutor() != null
+                && post.getAutor().equalsIgnoreCase(user.getNombre());
+
+        boolean esAdmin = user.getRole() == UserRole.ADMIN;
+
+        if (!esCreador && !esAdmin) {
+            // No tiene permisos para borrar este post
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        // 🔹 Borrar comentarios y votos asociados al post
+        commentRepository.deleteByPostId(id);
+        postVoteRepository.deleteByPostId(id);
+
+        // 🔹 Finalmente, borrar el post
+        postRepository.deleteById(id);
+
+        return ResponseEntity.noContent().build();
     }
 }
